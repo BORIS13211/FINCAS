@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Intranet - Gestión de Fincas (Base de datos compartida)</title>
+  <style>
+    /* ... Estilos igual que antes (omitidos para abreviar) ... */
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Intranet - Gestión de Fincas (BD Compartida)</h1>
+  </header>
+
+  <!-- Barra de navegación -->
+  <nav>
+    <button class="tab-button active" data-tab="fincas">Fincas</button>
+    <button class="tab-button" data-tab="incidencias">Incidencias</button>
+    <button class="tab-button" data-tab="gestiones">Gestiones</button>
+  </nav>
+
+  <!-- SECCIÓN: FINCAS -->
+  <div class="container" id="fincas-tab">
+    <h2>Fincas</h2>
+    <div id="finca-grid" class="finca-grid"></div>
+
+    <h2>Agregar Nueva Finca</h2>
+    <form id="add-finca-form">
+      <input type="text" id="nombre" placeholder="Nombre de la Finca" required />
+      <input type="text" id="presidente" placeholder="Presidente" required />
+      <input type="text" id="telefono" placeholder="Teléfono del Presidente" required />
+      <button type="submit">Agregar Finca</button>
+    </form>
+  </div>
+
+  <!-- SECCIÓN: INCIDENCIAS -->
+  <div class="container hidden" id="incidencias-tab">
+    <h2>Incidencias por Finca</h2>
+    <ul id="incidencias-list" class="incident-list">
+      <li>Selecciona una finca para ver las incidencias.</li>
+    </ul>
+
+    <div class="form-section">
+      <label for="select-finca-incidencias">Finca:</label>
+      <select id="select-finca-incidencias"></select><br />
+      <input type="text" id="new-incident" placeholder="Descripción de la incidencia" />
+      <button id="add-incident-btn">Agregar Incidencia</button>
+
+      <div id="warning-incident" class="warning" style="display: none;">
+        ¡Debes seleccionar una finca antes de agregar una incidencia!
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN: GESTIONES -->
+  <div class="container hidden" id="gestiones-tab">
+    <h2>Gestiones por Finca</h2>
+    <ul id="gestiones-list" class="management-list">
+      <li>Selecciona una finca para ver las gestiones.</li>
+    </ul>
+
+    <div class="form-section">
+      <label for="select-finca-gestiones">Finca:</label>
+      <select id="select-finca-gestiones"></select><br />
+      <input type="text" id="new-management" placeholder="Descripción de la gestión" />
+      <button id="add-management-btn">Agregar Gestión</button>
+
+      <div id="warning-management" class="warning" style="display: none;">
+        ¡Debes seleccionar una finca antes de agregar una gestión!
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===================== VARIABLES GLOBALES =====================
+    const fincaGrid          = document.getElementById("finca-grid");
+    const incidentList       = document.getElementById("incidencias-list");
+    const managementList     = document.getElementById("gestiones-list");
+    const newIncidentInput   = document.getElementById("new-incident");
+    const newManagementInput = document.getElementById("new-management");
+    const addIncidentBtn     = document.getElementById("add-incident-btn");
+    const addManagementBtn   = document.getElementById("add-management-btn");
+    const warningIncident    = document.getElementById("warning-incident");
+    const warningManagement  = document.getElementById("warning-management");
+    const selectFincaInc     = document.getElementById("select-finca-incidencias");
+    const selectFincaGest    = document.getElementById("select-finca-gestiones");
+
+    // Finca seleccionada en la pestaña principal
+    let currentFincaId = null;
+
+    // ===================== AL CARGAR LA PÁGINA =====================
+    window.onload = async () => {
+      const fincas = await fetchFincas();
+      fincas.forEach(f => addFincaToGrid(f));
+      populateFincasDropdown(selectFincaInc, fincas);
+      populateFincasDropdown(selectFincaGest, fincas);
+    };
+
+    // ============ MANEJO DE PESTAÑAS (NAV) ============
+    document.querySelectorAll(".tab-button").forEach(button => {
+      button.addEventListener("click", () => {
+        redirectToTab(button.dataset.tab);
+      });
+    });
+
+    function redirectToTab(tabName) {
+      document.querySelectorAll(".container").forEach(container => {
+        container.classList.toggle("hidden", container.id !== `${tabName}-tab`);
+      });
+      document.querySelectorAll(".tab-button").forEach(btn => btn.classList.remove("active"));
+      const tabButton = document.querySelector(`.tab-button[data-tab='${tabName}']`);
+      if (tabButton) tabButton.classList.add("active");
+    }
+
+    // ============ FORM: AÑADIR NUEVA FINCA ============
+    document.getElementById("add-finca-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const nombre     = document.getElementById("nombre").value.trim();
+      const presidente = document.getElementById("presidente").value.trim();
+      const telefono   = document.getElementById("telefono").value.trim();
+
+      if (!nombre || !presidente || !telefono) return;
+
+      // Creamos un id a partir del nombre (similar a antes)
+      const id = nombre.toLowerCase().replace(/\s+/g, "-");
+
+      // Llamamos al endpoint de creación
+      try {
+        const resp = await fetch("/api/fincas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, nombre, presidente, telefono })
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json();
+          alert("Error al añadir finca: " + err.error);
+          return;
+        }
+
+        const nuevaFinca = await resp.json();
+        addFincaToGrid(nuevaFinca);
+
+        // Actualizamos selects
+        const fincas = await fetchFincas();
+        populateFincasDropdown(selectFincaInc, fincas);
+        populateFincasDropdown(selectFincaGest, fincas);
+
+        // Reseteamos formulario
+        event.target.reset();
+      } catch (error) {
+        console.error("Error fetch:", error);
+      }
+    });
+
+    // ============ FUNC: AÑADIR FINCA AL GRID ============
+    function addFincaToGrid(finca) {
+      const fincaItem = document.createElement("div");
+      fincaItem.className = "finca-item";
+      fincaItem.dataset.id = finca.id;
+
+      fincaItem.innerHTML = `
+        <strong>${finca.nombre}</strong>
+        <small>Presidente: ${finca.presidente}</small>
+        <small>Tel: ${finca.telefono}</small>
+        <div class="badge red">${finca.incidencias.length}</div>
+        <div class="badge blue">${finca.gestiones.length}</div>
+        <button class="edit-button">Editar</button>
+      `;
+
+      // Clic en la tarjeta -> seleccionar finca
+      fincaItem.addEventListener("click", (e) => {
+        if (
+          e.target.classList.contains("edit-button") ||
+          e.target.classList.contains("badge")
+        ) {
+          return; // evitamos seleccionar si clic fue en botón/badge
+        }
+        selectFinca(finca.id);
+      });
+
+      // Botón Editar
+      fincaItem.querySelector(".edit-button").addEventListener("click", (e) => {
+        e.stopPropagation();
+        editFinca(finca.id);
+      });
+
+      // Badge rojo -> incidencias
+      const redBadge = fincaItem.querySelector(".badge.red");
+      redBadge.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectFinca(finca.id);
+        redirectToTab("incidencias");
+      });
+
+      // Badge azul -> gestiones
+      const blueBadge = fincaItem.querySelector(".badge.blue");
+      blueBadge.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectFinca(finca.id);
+        redirectToTab("gestiones");
+      });
+
+      fincaGrid.appendChild(fincaItem);
+      updateBadge(finca.id, finca.incidencias.length, "red");
+      updateBadge(finca.id, finca.gestiones.length, "blue");
+    }
+
+    // ============ FUNC: ACTUALIZAR BADGE ============
+    function updateBadge(fincaId, count, color) {
+      const fincaItem = document.querySelector(`.finca-item[data-id="${fincaId}"]`);
+      if (!fincaItem) return;
+      const badge = fincaItem.querySelector(`.badge.${color}`);
+      if (!badge) return;
+      badge.textContent = count;
+      badge.style.display = (count > 0) ? "flex" : "none";
+    }
+
+    // ============ FUNC: SELECCIONAR FINCA ============
+    function selectFinca(fincaId) {
+      currentFincaId = fincaId;
+      document.querySelectorAll(".finca-item").forEach(item => {
+        item.classList.toggle("selected", item.dataset.id === fincaId);
+      });
+      selectFincaInc.value  = fincaId;
+      selectFincaGest.value = fincaId;
+      // Si estamos en incidencias/gestiones, cargamos la info
+      if (!document.getElementById("incidencias-tab").classList.contains("hidden")) {
+        loadIncidencias(fincaId);
+      }
+      if (!document.getElementById("gestiones-tab").classList.contains("hidden")) {
+        loadGestiones(fincaId);
+      }
+    }
+
+    // ============ AÑADIR INCIDENCIA ============
+    addIncidentBtn.addEventListener("click", async () => {
+      const selectedFincaId = selectFincaInc.value;
+      if (!selectedFincaId) {
+        warningIncident.style.display = "block";
+        return;
+      } else {
+        warningIncident.style.display = "none";
+      }
+
+      const incidentText = newIncidentInput.value.trim();
+      if (!incidentText) return;
+
+      try {
+        const resp = await fetch(`/api/fincas/${selectedFincaId}/incidencias`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ descripcion: incidentText })
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          alert("Error al añadir incidencia: " + err.error);
+          return;
+        }
+        const data = await resp.json(); // { ok, finca }
+        updateBadge(selectedFincaId, data.finca.incidencias.length, "red");
+        loadIncidencias(selectedFincaId);
+        newIncidentInput.value = "";
+      } catch (error) {
+        console.error(error);
+      }
+    });
+
+    // ============ AÑADIR GESTIÓN ============
+    addManagementBtn.addEventListener("click", async () => {
+      const selectedFincaId = selectFincaGest.value;
+      if (!selectedFincaId) {
+        warningManagement.style.display = "block";
+        return;
+      } else {
+        warningManagement.style.display = "none";
+      }
+
+      const managementText = newManagementInput.value.trim();
+      if (!managementText) return;
+
+      try {
+        const resp = await fetch(`/api/fincas/${selectedFincaId}/gestiones`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ descripcion: managementText })
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          alert("Error al añadir gestión: " + err.error);
+          return;
+        }
+        const data = await resp.json(); // { ok, finca }
+        updateBadge(selectedFincaId, data.finca.gestiones.length, "blue");
+        loadGestiones(selectedFincaId);
+        newManagementInput.value = "";
+      } catch (error) {
+        console.error(error);
+      }
+    });
+
+    // ============ CAMBIO DE SELECT EN INCIDENCIAS / GESTIONES ============
+    selectFincaInc.addEventListener("change", () => {
+      if (selectFincaInc.value) loadIncidencias(selectFincaInc.value);
+    });
+    selectFincaGest.addEventListener("change", () => {
+      if (selectFincaGest.value) loadGestiones(selectFincaGest.value);
+    });
+
+    // ============ CARGAR INCIDENCIAS ============
+    async function loadIncidencias(fincaId) {
+      const fincas = await fetchFincas();
+      const finca = fincas.find(f => f.id === fincaId);
+
+      if (!finca || !finca.incidencias.length) {
+        incidentList.innerHTML = "<li>No hay incidencias registradas.</li>";
+        return;
+      }
+
+      incidentList.innerHTML = finca.incidencias.map((inc, index) => `
+        <li>
+          ${inc}
+          <button onclick="deleteIncident('${fincaId}', ${index})">Borrar</button>
+        </li>
+      `).join("");
+    }
+
+    // ============ CARGAR GESTIONES ============
+    async function loadGestiones(fincaId) {
+      const fincas = await fetchFincas();
+      const finca = fincas.find(f => f.id === fincaId);
+
+      if (!finca || !finca.gestiones.length) {
+        managementList.innerHTML = "<li>No hay gestiones registradas.</li>";
+        return;
+      }
+
+      managementList.innerHTML = finca.gestiones.map((man, index) => `
+        <li>
+          ${man}
+          <button onclick="deleteManagement('${fincaId}', ${index})">Borrar</button>
+        </li>
+      `).join("");
+    }
+
+    // ============ EDITAR FINCA ============
+    async function editFinca(fincaId) {
+      const fincas = await fetchFincas();
+      const finca = fincas.find(f => f.id === fincaId);
+      if (!finca) return;
+
+      const nuevoNombre     = prompt("Nuevo nombre de la finca:", finca.nombre) || finca.nombre;
+      const nuevoPresidente = prompt("Nuevo presidente:", finca.presidente)     || finca.presidente;
+      const nuevoTelefono   = prompt("Nuevo teléfono:", finca.telefono)         || finca.telefono;
+
+      try {
+        const resp = await fetch(`/api/fincas/${fincaId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nombre: nuevoNombre,
+            presidente: nuevoPresidente,
+            telefono: nuevoTelefono
+          })
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          alert("Error al editar finca: " + err.error);
+          return;
+        }
+        const updatedFinca = await resp.json();
+        
+        // Actualizar en el DOM sin recargar
+        const fincaItem = document.querySelector(`.finca-item[data-id="${fincaId}"]`);
+        if (fincaItem) {
+          fincaItem.querySelector("strong").textContent      = updatedFinca.nombre;
+          fincaItem.querySelectorAll("small")[0].textContent = `Presidente: ${updatedFinca.presidente}`;
+          fincaItem.querySelectorAll("small")[1].textContent = `Tel: ${updatedFinca.telefono}`;
+        }
+
+        // Refrescar selects
+        const fincasUpdated = await fetchFincas();
+        populateFincasDropdown(selectFincaInc, fincasUpdated);
+        populateFincasDropdown(selectFincaGest, fincasUpdated);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    // ============ ELIMINAR INCIDENCIA ============
+    window.deleteIncident = async function(fincaId, index) {
+      try {
+        const resp = await fetch(`/api/fincas/${fincaId}/incidencias/${index}`, {
+          method: "DELETE"
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          alert("Error al borrar incidencia: " + err.error);
+          return;
+        }
+
+        // Volver a cargar las incidencias y actualizar badge
+        const fincas = await fetchFincas();
+        const finca = fincas.find(f => f.id === fincaId);
+        updateBadge(fincaId, finca ? finca.incidencias.length : 0, "red");
+        loadIncidencias(fincaId);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    // ============ ELIMINAR GESTIÓN ============
+    window.deleteManagement = async function(fincaId, index) {
+      try {
+        const resp = await fetch(`/api/fincas/${fincaId}/gestiones/${index}`, {
+          method: "DELETE"
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          alert("Error al borrar gestión: " + err.error);
+          return;
+        }
+
+        // Volver a cargar las gestiones y actualizar badge
+        const fincas = await fetchFincas();
+        const finca = fincas.find(f => f.id === fincaId);
+        updateBadge(fincaId, finca ? finca.gestiones.length : 0, "blue");
+        loadGestiones(fincaId);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    // ============ FUNC: OBTENER FINCAS DESDE API ============
+    async function fetchFincas() {
+      try {
+        const resp = await fetch('/api/fincas');
+        if (!resp.ok) {
+          console.error("Error al consultar /api/fincas");
+          return [];
+        }
+        return await resp.json();
+      } catch (error) {
+        console.error(error);
+        return [];
+      }
+    }
+
+    // ============ POBLAR LOS SELECTS DE FINCAS ============
+    function populateFincasDropdown(selectElement, fincas) {
+      const previousValue = selectElement.value;  // Mantener la selección previa
+      selectElement.innerHTML = `<option value="">-- Selecciona una finca --</option>`;
+      fincas.forEach(f => {
+        const option = document.createElement("option");
+        option.value = f.id;
+        option.textContent = f.nombre;
+        selectElement.appendChild(option);
+      });
+      // Restaurar valor si es válido
+      if (fincas.some(f => f.id === previousValue)) {
+        selectElement.value = previousValue;
+      } else {
+        selectElement.value = "";
+      }
+    }
+  </script>
+</body>
+</html>

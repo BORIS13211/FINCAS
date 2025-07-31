@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión de Incidencias</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Your existing HTML content here -->
+    
+    <!-- JavaScript modules in correct loading order -->
+    <!-- Core utilities and storage first -->
+    <script src="utils.js"></script>
+    <script src="storage.js"></script>
+    
+    <!-- Authentication -->
+    <script src="auth.js"></script>
+    
+    <!-- Data management modules -->
+    <script src="communities.js"></script>
+    <script src="industrials.js"></script>
+    <script src="incidents.js"></script>
+    <script src="visits.js"></script>
+    
+    <!-- External integrations -->
+    <script src="whatsapp.js"></script>
+    <script src="forms.js"></script>
+    
+    <!-- Main application - must be last -->
+    <script src="main.js"></script>
+</body>
+</html>

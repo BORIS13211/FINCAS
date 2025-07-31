@@ -1,4 +1,19 @@
-# Sistema de Gestión de Incidencias - Estructura Modular
+# 🏢 Sistema de Gestión de Incidencias
+
+Sistema completo para la gestión de incidencias en comunidades de propietarios con integración de WhatsApp y Google Forms/Sheets.
+
+## 🚀 Características Principales
+
+- **Gestión de Incidencias**: Crear, asignar y seguir incidencias
+- **Gestión de Comunidades**: Administrar comunidades y sus presidentes  
+- **Gestión de Industriales**: Registrar industriales con sus especialidades
+- **Programación de Visitas**: Agendar y gestionar visitas técnicas
+- **Integración WhatsApp**: Notificaciones automáticas a industriales y comunidades
+- **Integración Google Forms**: Sincronización automática de respuestas
+- **Interfaz Responsive**: Adaptada para móviles y tablets
+- **Almacenamiento Local**: Datos persistentes en el navegador
+
+## 📁 Estructura Modular
 
 Este proyecto ha sido refactorizado para separar el código JavaScript monolítico en módulos especializados, mejorando la mantenibilidad y organización del código.
 
@@ -122,3 +137,152 @@ Si estás migrando desde el archivo JavaScript monolítico:
 4. No se requieren cambios en el CSS
 
 La aplicación funcionará exactamente igual que antes, pero ahora con mejor organización del código.
+
+## 🎯 Cómo Usar la Aplicación
+
+### 1. **Instalación**
+```bash
+# Clona o descarga todos los archivos
+# Abre index.html en tu navegador web
+```
+
+### 2. **Inicio de Sesión**
+- Usuario: cualquier texto
+- Contraseña: cualquier texto
+- Haz clic en "Iniciar Sesión"
+
+### 3. **Gestionar Comunidades**
+- Ve a la pestaña "🏢 Comunidades"
+- Completa el formulario con:
+  - Nombre de la comunidad
+  - Dirección completa
+  - Nombre del presidente
+  - Teléfono del presidente
+- Haz clic en "➕ Agregar Comunidad"
+
+### 4. **Registrar Industriales**
+- Ve a la pestaña "👷 Industriales"
+- Completa el formulario con:
+  - Nombre del industrial
+  - Teléfono (formato: +34XXXXXXXXX)
+  - Especialidades (selecciona una o más)
+- Haz clic en "➕ Registrar Industrial"
+
+### 5. **Reportar Incidencia**
+- Ve a la pestaña "📝 Reportar Incidencia"
+- Completa todos los campos:
+  - Título descriptivo
+  - Prioridad (Baja, Media, Alta, Urgente)
+  - Selecciona la comunidad
+  - Datos del propietario afectado
+  - Selecciona uno o más industriales
+  - Descripción detallada
+- Haz clic en "📤 Reportar Incidencia"
+- **Se abrirán automáticamente ventanas de WhatsApp** para cada industrial seleccionado
+
+### 6. **Programar Visitas**
+- Ve a "📋 Lista de Incidencias"
+- Haz clic en "📅 Programar Visita" en una incidencia pendiente
+- Selecciona fecha y horario
+- Añade notas si es necesario
+- Marca "Enviar recordatorio" si quieres notificar al presidente
+- **Se abrirá WhatsApp** para confirmar la visita a la comunidad
+
+### 7. **Gestionar Visitas**
+- Ve a "📅 Programar Visitas"
+- Haz clic en "✏️ Actualizar Estado"
+- Cambia el estado y añade detalles del trabajo
+- Si marcas como "Completada", se abrirá WhatsApp para notificar
+
+## 📱 Integración WhatsApp
+
+La aplicación genera automáticamente mensajes de WhatsApp para:
+
+### **A Industriales (al crear incidencia):**
+- Detalles de la incidencia
+- Ubicación con enlace a Google Maps
+- Enlace al formulario de Google para agendar visita
+- Información de contacto
+
+### **A Comunidades (al programar visita):**
+- Confirmación de visita programada
+- Datos del industrial asignado
+- Fecha y horario
+- Información de la incidencia
+
+### **A Comunidades (al completar trabajo):**
+- Confirmación de trabajo completado
+- Detalles del trabajo realizado
+- Datos del industrial
+
+## 🔗 Integración Google Forms/Sheets
+
+### **Configuración:**
+1. **Google Sheets URL** (incidents.js línea 47):
+   - Reemplaza la URL vacía con tu Google Apps Script
+   - Para sincronizar incidencias creadas
+
+2. **Google Forms CSV** (forms.js línea 4):
+   - URL del CSV público de respuestas
+   - Para sincronizar respuestas de industriales
+
+3. **Google Forms URL** (whatsapp.js línea 10):
+   - URL del formulario con campo prellenado
+   - Para que industriales agenden visitas
+
+### **Flujo de Trabajo:**
+1. Se crea incidencia → Se sincroniza a Google Sheets
+2. Industrial recibe WhatsApp con enlace al formulario
+3. Industrial completa formulario con fecha/hora
+4. Sistema sincroniza respuesta automáticamente
+5. Visita se marca como completada
+
+## 💾 Datos de Ejemplo
+
+La aplicación incluye datos de ejemplo:
+
+### **Comunidades:**
+- Residencial Los Jardines (Barcelona)
+- Complejo Vista Mar (Valencia)
+
+### **Industriales:**
+- Juan Martínez (Fontanería, Mantenimiento)
+- Ana Rodríguez (Electricidad, Climatización)  
+- Pedro Sánchez (Piscinas, Jardinería)
+
+## 🛠️ Personalización
+
+### **Especialidades de Industriales:**
+Edita en `index.html` líneas 196-203:
+```html
+<label><input type="checkbox" name="specialties" value="TuEspecialidad"> Tu Especialidad</label>
+```
+
+### **Estados de Incidencias:**
+Modifica en `utils.js` la función `getStatusText()`
+
+### **Prioridades:**
+Modifica en `utils.js` la función `getPriorityText()`
+
+## 📱 Uso en Móviles
+
+- La interfaz es completamente responsive
+- Funciona perfectamente en tablets y móviles
+- Los enlaces de WhatsApp se abren directamente en la app
+- Formularios optimizados para pantallas táctiles
+
+## 🔧 Solución de Problemas
+
+### **WhatsApp no se abre:**
+- Verifica que los números tengan formato +34XXXXXXXXX
+- Asegúrate de tener WhatsApp instalado
+
+### **No se sincronizan datos:**
+- Verifica las URLs de Google Sheets/Forms
+- Comprueba la conexión a internet
+- Revisa la consola del navegador (F12)
+
+### **Datos no se guardan:**
+- Los datos se guardan en localStorage del navegador
+- No borres los datos del navegador
+- Para backup, exporta desde Configuración del navegador

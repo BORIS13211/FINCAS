@@ -1,570 +1,999 @@
-'use strict';
+// Configuración de Supabase
+const SUPABASE_URL = 'https://yncwsfolvwosftuglpcf.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluY3dzZm9sdndvc2Z0dWdscGNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0OTA2NTksImV4cCI6MjA3MDA2NjY1OX0.BbOv0BG6YdPZ9miPqHhLQbXodF5CiRiIMgot4HnO148';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Simple data store using localStorage so it works without backend
-const storageKeys = {
-  currentUser: 'sgi_current_user',
-  incidents: 'sgi_incidents',
-  industrials: 'sgi_industrials',
-  communities: 'sgi_communities'
+// Estado global de la aplicación
+let currentUser = null;
+let selectedIndustrials = [];
+let incidents = [];
+let communities = [];
+let industrials = [];
+
+// Estados de incidencias
+const INCIDENT_STATES = {
+    created: 'creada',
+    notified_industrial: 'notificada_industrial',
+    notified_president: 'notificada_presidente',
+    completed: 'completada'
 };
 
-const appState = {
-  currentUser: null,
-  incidents: [],
-  industrials: [],
-  communities: [],
-  selectedIndustrialIds: new Set(),
-  isDropdownOpen: false
-};
-
-// Try to init Supabase if keys are present (optional)
-let supabaseClient = null;
-(function initSupabaseIfAvailable() {
-  const url = localStorage.getItem('SB_URL');
-  const anon = localStorage.getItem('SB_ANON_KEY');
-  if (window.supabase && url && anon) {
-    try {
-      supabaseClient = window.supabase.createClient(url, anon);
-      console.info('[Supabase] Cliente inicializado');
-    } catch (e) {
-      console.warn('[Supabase] No se pudo inicializar:', e);
+// Inicialización de la aplicación
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Inicializando aplicación...');
+    
+    if (typeof window.supabase === 'undefined') {
+        console.error('❌ ERROR CRÍTICO: Supabase no está cargado');
+        showNotification('Error: Supabase no está disponible', 'error');
+        return;
     }
-  }
-})();
+    
+    if (!supabase) {
+        console.error('❌ ERROR CRÍTICO: Cliente Supabase no se pudo crear');
+        showNotification('Error: No se pudo conectar a la base de datos', 'error');
+        return;
+    }
+    
+    console.log('✅ Supabase inicializado correctamente');
+    setupEventListeners();
+    loadAllData();
+    console.log('✅ Aplicación inicializada completamente');
+});
 
-function loadFromStorage() {
-  try {
-    appState.currentUser = JSON.parse(localStorage.getItem(storageKeys.currentUser));
-  } catch {}
-  try {
-    appState.incidents = JSON.parse(localStorage.getItem(storageKeys.incidents)) || [];
-  } catch { appState.incidents = []; }
-  try {
-    appState.industrials = JSON.parse(localStorage.getItem(storageKeys.industrials)) || [];
-  } catch { appState.industrials = []; }
-  try {
-    appState.communities = JSON.parse(localStorage.getItem(storageKeys.communities)) || [];
-  } catch { appState.communities = []; }
-}
-
-function saveToStorage() {
-  localStorage.setItem(storageKeys.incidents, JSON.stringify(appState.incidents));
-  localStorage.setItem(storageKeys.industrials, JSON.stringify(appState.industrials));
-  localStorage.setItem(storageKeys.communities, JSON.stringify(appState.communities));
-}
-
-// Utilities
-function qs(sel) { return document.querySelector(sel); }
-function qsa(sel) { return Array.from(document.querySelectorAll(sel)); }
-
-function showNotification(message, type = 'success', timeoutMs = 2500) {
-  const container = qs('#notificationContainer');
-  const el = document.createElement('div');
-  el.className = `notification ${type}`;
-  el.textContent = message;
-  container.appendChild(el);
-  setTimeout(() => {
-    el.remove();
-  }, timeoutMs);
-}
-
-function formatPhone(phone) {
-  return phone.trim();
-}
-
-// Tabs
-function setActiveTab(tabId) {
-  qsa('.tab').forEach(btn => btn.classList.remove('active'));
-  qsa('.tab-content').forEach(c => c.classList.remove('active'));
-  const target = document.getElementById(tabId);
-  if (target) {
-    target.classList.add('active');
-    // activate corresponding tab button
-    qsa('.tabs .tab').forEach(btn => {
-      if (btn.getAttribute('onclick')?.includes(`"${tabId}"`) || btn.getAttribute('onclick')?.includes(`'${tabId}'`)) {
-        btn.classList.add('active');
-      }
+// Event Listeners
+function setupEventListeners() {
+    const forms = ['loginForm', 'incidentForm', 'communityForm', 'industrialForm'];
+    const handlers = [handleLogin, handleIncidentSubmit, handleCommunitySubmit, handleIndustrialSubmit];
+    
+    forms.forEach((formId, index) => {
+        const form = document.getElementById(formId);
+        if (form) {
+            form.addEventListener('submit', handlers[index]);
+            console.log(`✅ ${formId} listener añadido`);
+        } else {
+            console.error(`❌ ${formId} no encontrado`);
+        }
     });
-  }
+    
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('industrialDropdown');
+        const header = document.querySelector('.multi-select-header');
+        if (!header?.contains(e.target) && !dropdown?.contains(e.target)) {
+            closeIndustrialDropdown();
+        }
+    });
+    
+    console.log('✅ Todos los event listeners configurados');
 }
 
-function showTab(tabId, event) {
-  if (event) event.preventDefault();
-  setActiveTab(tabId);
-  if (tabId === 'newIncident') {
-    rebuildIndustrialDropdown();
-    populateCommunitySelect();
-  }
-  if (tabId === 'incidentList') {
-    renderIncidentList();
-  }
-  if (tabId === 'industrials') {
-    renderIndustrialsList();
-  }
-  if (tabId === 'communities') {
-    renderCommunitiesList();
-  }
-}
-
-function navigateToTab(tabId) {
-  setActiveTab(tabId);
-  if (tabId === 'incidentList') renderIncidentList();
-  if (tabId === 'industrials') renderIndustrialsList();
-  if (tabId === 'communities') renderCommunitiesList();
-}
-
-window.showTab = showTab;
-window.navigateToTab = navigateToTab;
-
-// Login / Logout
-function setupLogin() {
-  const loginForm = qs('#loginForm');
-  loginForm?.addEventListener('submit', (e) => {
+// Autenticación
+async function handleLogin(e) {
     e.preventDefault();
-    const username = qs('#username').value.trim();
-    const password = qs('#password').value.trim();
-
-    qs('#usernameError').textContent = '';
-    qs('#passwordError').textContent = '';
-
-    if (!username) {
-      qs('#usernameError').textContent = 'El usuario es obligatorio';
-      return;
+    clearAllErrors();
+    
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value.trim();
+    
+    if (!validateCredentials(username, password)) return;
+    
+    if (username === 'admin' && password === 'admin') {
+        currentUser = { username, loginTime: new Date() };
+        showDashboard();
+        await loadAllData();
+        showNotification('¡Bienvenido!', 'success');
+    } else {
+        showFieldError('password', ['Credenciales incorrectas']);
     }
-    if (!password) {
-      qs('#passwordError').textContent = 'La contraseña es obligatoria';
-      return;
-    }
+}
 
-    appState.currentUser = { username };
-    localStorage.setItem(storageKeys.currentUser, JSON.stringify(appState.currentUser));
-    qs('#currentUserDisplay').textContent = `👋 ${username}`;
-    qs('#loginScreen').style.display = 'none';
-    qs('#dashboard').style.display = 'block';
-    renderAll();
-    showNotification('Sesión iniciada');
-  });
+function validateCredentials(username, password) {
+    let hasErrors = false;
+    
+    if (!username || username.length < 2) {
+        showFieldError('username', ['Usuario requerido']);
+        hasErrors = true;
+    }
+    
+    if (!password || password.length < 2) {
+        showFieldError('password', ['Contraseña requerida']);
+        hasErrors = true;
+    }
+    
+    return !hasErrors;
+}
+
+function showDashboard() {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('currentUserDisplay').textContent = `Bienvenido, ${currentUser.username}`;
 }
 
 function logout() {
-  appState.currentUser = null;
-  localStorage.removeItem(storageKeys.currentUser);
-  qs('#dashboard').style.display = 'none';
-  qs('#loginScreen').style.display = 'grid';
-  showNotification('Sesión cerrada', 'success');
+    currentUser = null;
+    selectedIndustrials = [];
+    document.getElementById('loginScreen').style.display = 'grid';
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('loginForm').reset();
+    clearAllErrors();
 }
 
-window.logout = logout;
-
-// Forms
-function setupIncidentForm() {
-  const form = qs('#incidentForm');
-  form?.addEventListener('submit', (e) => {
+// Gestión de Comunidades
+async function handleCommunitySubmit(e) {
     e.preventDefault();
-    // Basic validation
-    const title = qs('#incidentTitle').value.trim();
-    const priority = qs('#priority').value;
-    const communityId = qs('#communitySelect').value;
-    const ownerName = qs('#ownerName').value.trim();
-    const ownerPhone = formatPhone(qs('#ownerPhone').value);
-    const description = qs('#incidentDescription').value.trim();
-
-    qs('#incidentTitleError').textContent = '';
-    qs('#priorityError').textContent = '';
-    qs('#communitySelectError').textContent = '';
-    qs('#ownerNameError').textContent = '';
-    qs('#ownerPhoneError').textContent = '';
-    qs('#industrialsError').textContent = '';
-    qs('#incidentDescriptionError').textContent = '';
-
-    if (!title) { qs('#incidentTitleError').textContent = 'Campo obligatorio'; return; }
-    if (!priority) { qs('#priorityError').textContent = 'Seleccione prioridad'; return; }
-    if (!communityId) { qs('#communitySelectError').textContent = 'Seleccione una comunidad'; return; }
-    if (!ownerName) { qs('#ownerNameError').textContent = 'Campo obligatorio'; return; }
-    if (!ownerPhone) { qs('#ownerPhoneError').textContent = 'Campo obligatorio'; return; }
-    if (appState.selectedIndustrialIds.size === 0) { qs('#industrialsError').textContent = 'Seleccione al menos un industrial'; return; }
-    if (!description) { qs('#incidentDescriptionError').textContent = 'Campo obligatorio'; return; }
-
-    const id = crypto.randomUUID();
-    const assignedIndustrialIds = Array.from(appState.selectedIndustrialIds);
-    const createdAt = new Date().toISOString();
-
-    const incident = {
-      id,
-      title,
-      priority,
-      communityId,
-      ownerName,
-      ownerPhone,
-      industrialIds: assignedIndustrialIds,
-      description,
-      status: 'pending',
-      createdAt,
-      updatedAt: createdAt
+    clearAllErrors();
+    
+    const data = {
+        name: document.getElementById('communityName').value.trim(),
+        address: document.getElementById('communityAddress').value.trim(),
+        president_name: document.getElementById('presidentName').value.trim(),
+        president_phone: document.getElementById('presidentPhone').value.trim()
     };
-
-    appState.incidents.unshift(incident);
-    saveToStorage();
-    appState.selectedIndustrialIds.clear();
-    updateSelectedIndustrialsDisplay();
-    form.reset();
-    qs('#industrialSelectText').textContent = 'Seleccionar industriales';
-    renderAll();
-    setActiveTab('incidentList');
-    showNotification('Incidencia creada');
-  });
+    
+    if (!validateCommunityData(data)) return;
+    
+    try {
+        const { error } = await supabase.from('comunidades').insert([data]);
+        if (error) throw error;
+        
+        document.getElementById('communityForm').reset();
+        showNotification('Comunidad guardada correctamente', 'success');
+        await loadCommunities();
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Error al guardar comunidad', 'error');
+    }
 }
 
-function setupIndustrialForm() {
-  const form = qs('#industrialForm');
-  form?.addEventListener('submit', (e) => {
+function validateCommunityData(data) {
+    const errors = [];
+    
+    if (data.name.length < 2) errors.push(['communityName', 'Nombre muy corto']);
+    if (data.address.length < 5) errors.push(['communityAddress', 'Dirección muy corta']);
+    if (data.president_name.length < 2) errors.push(['presidentName', 'Nombre muy corto']);
+    if (!validatePhone(data.president_phone)) errors.push(['presidentPhone', 'Teléfono inválido']);
+    
+    errors.forEach(([field, msg]) => showFieldError(field, [msg]));
+    return errors.length === 0;
+}
+
+async function deleteCommunity(id) {
+    if (!confirm('¿Eliminar esta comunidad?')) return;
+    
+    try {
+        const { error } = await supabase.from('comunidades').delete().eq('id', id);
+        if (error) throw error;
+        showNotification('Comunidad eliminada', 'success');
+        await loadCommunities();
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Error al eliminar', 'error');
+    }
+}
+
+// Gestión de Industriales
+async function handleIndustrialSubmit(e) {
     e.preventDefault();
-    const name = qs('#industrialName').value.trim();
-    const phone = formatPhone(qs('#industrialPhone').value);
-    const specialties = Array.from(document.querySelectorAll('input[name="specialties"]:checked')).map(i => i.value);
-
-    qs('#industrialNameError').textContent = '';
-    qs('#industrialPhoneError').textContent = '';
-    qs('#specialtiesError').textContent = '';
-
-    if (!name) { qs('#industrialNameError').textContent = 'Campo obligatorio'; return; }
-    if (!phone) { qs('#industrialPhoneError').textContent = 'Campo obligatorio'; return; }
-    if (specialties.length === 0) { qs('#specialtiesError').textContent = 'Seleccione al menos una especialidad'; return; }
-
-    const industrial = {
-      id: crypto.randomUUID(),
-      name,
-      phone,
-      specialties
-    };
-
-    appState.industrials.unshift(industrial);
-    saveToStorage();
-    form.reset();
-    renderAll();
-    rebuildIndustrialDropdown();
-    showNotification('Industrial registrado');
-  });
+    clearAllErrors();
+    
+    const name = document.getElementById('industrialName').value.trim();
+    const phone = document.getElementById('industrialPhone').value.trim();
+    const specialties = Array.from(document.querySelectorAll('input[name="specialties"]:checked')).map(cb => cb.value);
+    
+    if (!validateIndustrialData(name, phone, specialties)) return;
+    
+    try {
+        const { error } = await supabase.from('industriales').insert([{
+            name, phone, specialties: specialties.join(', ')
+        }]);
+        
+        if (error) throw error;
+        
+        document.getElementById('industrialForm').reset();
+        showNotification('Industrial registrado correctamente', 'success');
+        await loadIndustrials();
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Error al registrar industrial', 'error');
+    }
 }
 
-function setupCommunityForm() {
-  const form = qs('#communityForm');
-  form?.addEventListener('submit', (e) => {
+function validateIndustrialData(name, phone, specialties) {
+    const errors = [];
+    
+    if (name.length < 2) errors.push(['industrialName', 'Nombre muy corto']);
+    if (!validatePhone(phone)) errors.push(['industrialPhone', 'Teléfono inválido']);
+    if (specialties.length === 0) errors.push(['specialties', 'Seleccione al menos una especialidad']);
+    
+    errors.forEach(([field, msg]) => showFieldError(field, [msg]));
+    return errors.length === 0;
+}
+
+async function deleteIndustrial(id) {
+    if (!confirm('¿Eliminar este industrial?')) return;
+    
+    try {
+        const { error } = await supabase.from('industriales').delete().eq('id', id);
+        if (error) throw error;
+        showNotification('Industrial eliminado', 'success');
+        await loadIndustrials();
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Error al eliminar', 'error');
+    }
+}
+
+// Gestión de Incidencias
+async function handleIncidentSubmit(e) {
     e.preventDefault();
-    const name = qs('#communityName').value.trim();
-    const address = qs('#communityAddress').value.trim();
-    const presidentName = qs('#presidentName').value.trim();
-    const presidentPhone = formatPhone(qs('#presidentPhone').value);
-
-    qs('#communityNameError').textContent = '';
-    qs('#communityAddressError').textContent = '';
-    qs('#presidentNameError').textContent = '';
-    qs('#presidentPhoneError').textContent = '';
-
-    if (!name) { qs('#communityNameError').textContent = 'Campo obligatorio'; return; }
-    if (!address) { qs('#communityAddressError').textContent = 'Campo obligatorio'; return; }
-    if (!presidentName) { qs('#presidentNameError').textContent = 'Campo obligatorio'; return; }
-    if (!presidentPhone) { qs('#presidentPhoneError').textContent = 'Campo obligatorio'; return; }
-
-    const community = {
-      id: crypto.randomUUID(),
-      name,
-      address,
-      presidentName,
-      presidentPhone
+    clearAllErrors();
+    
+    console.log('🔍 Iniciando creación de incidencia...');
+    
+    const elements = ['incidentTitle', 'priority', 'communitySelect', 'ownerName', 'ownerPhone', 'incidentDescription']
+        .map(id => ({ id, el: document.getElementById(id) }));
+    
+    if (elements.some(({ el, id }) => !el && console.error(`❌ ${id} no encontrado`))) {
+        showNotification('Error: Formulario incompleto', 'error');
+        return;
+    }
+    
+    const data = {
+        title: elements[0].el.value.trim(),
+        priority: elements[1].el.value,
+        community_id: parseInt(elements[2].el.value) || null,
+        owner_name: elements[3].el.value.trim(),
+        owner_phone: elements[4].el.value.trim(),
+        description: elements[5].el.value.trim(),
+        assigned_industrials: selectedIndustrials.map(i => i.id),
+        status: INCIDENT_STATES.created
     };
-
-    appState.communities.unshift(community);
-    saveToStorage();
-    form.reset();
-    renderAll();
-    showNotification('Comunidad agregada');
-  });
+    
+    console.log('📝 Datos de la incidencia:', data);
+    
+    if (!validateIncidentData(data)) return;
+    
+    try {
+        console.log('💾 Insertando en Supabase...');
+        
+        const { error } = await supabase.from('incidencias').insert([data]);
+        if (error) throw error;
+        
+        console.log('✅ Incidencia creada exitosamente');
+        
+        // Limpiar formulario
+        document.getElementById('incidentForm').reset();
+        selectedIndustrials = [];
+        updateIndustrialSelection();
+        closeIndustrialDropdown();
+        
+        showNotification('Incidencia reportada exitosamente', 'success');
+        await loadIncidents();
+        
+    } catch (error) {
+        console.error('❌ Error completo:', error);
+        showNotification(`Error al reportar incidencia: ${error.message}`, 'error');
+    }
 }
 
-// Dropdown Industriales
+function validateIncidentData(data) {
+    const validations = [
+        [!data.title || data.title.length < 3, 'incidentTitle', 'Título muy corto (mínimo 3 caracteres)'],
+        [!data.priority, 'priority', 'Seleccione prioridad'],
+        [!data.community_id || isNaN(data.community_id), 'communitySelect', 'Seleccione comunidad'],
+        [!data.owner_name || data.owner_name.length < 2, 'ownerName', 'Nombre muy corto (mínimo 2 caracteres)'],
+        [!data.owner_phone || !validatePhone(data.owner_phone), 'ownerPhone', 'Teléfono inválido'],
+        [!selectedIndustrials || selectedIndustrials.length === 0, 'industrials', 'Seleccione al menos un industrial'],
+        [!data.description || data.description.length < 5, 'incidentDescription', 'Descripción muy corta (mínimo 5 caracteres)']
+    ];
+    
+    const errors = validations.filter(([condition]) => condition).map(([, field, msg]) => [field, msg]);
+    
+    errors.forEach(([field, msg]) => showFieldError(field, [msg]));
+    
+    return errors.length === 0;
+}
+
+// ✅ FUNCIÓN CORREGIDA: Notificar al Propietario (no al industrial)
+async function notifyIndustrial(id) {
+    try {
+        console.log('🔔 Notificando propietario para incidencia:', id);
+        
+        const { data: incidentData, error: selectError } = await supabase
+            .from('incidencias')
+            .select('*, comunidades(name, address)')
+            .eq('id', id)
+            .single();
+
+        if (selectError) {
+            console.error('Error al obtener incidencia:', selectError);
+            throw selectError;
+        }
+
+        console.log('📋 Datos incidencia obtenidos:', incidentData);
+
+        // Actualizar estado a notificado industrial
+        const { error: updateError } = await supabase
+            .from('incidencias')
+            .update({ status: INCIDENT_STATES.notified_industrial })
+            .eq('id', id);
+
+        if (updateError) {
+            console.error('Error al actualizar estado:', updateError);
+            throw updateError;
+        }
+
+        console.log('✅ Estado actualizado correctamente');
+
+        // ✅ CORREGIDO: Enviar notificación al PROPIETARIO (no al industrial)
+        sendOwnerNotification(incidentData);
+        
+        showNotification('Propietario notificado correctamente', 'success');
+        await loadIncidents();
+
+    } catch (error) {
+        console.error('❌ Error completo al notificar:', error);
+        showNotification(`Error al notificar: ${error.message}`, 'error');
+    }
+}
+
+// ✅ NUEVA FUNCIÓN: Notificar al propietario
+function sendOwnerNotification(incident) {
+    const phone = incident.owner_phone.replace(/[^0-9]/g, '');
+    const community = incident.comunidades?.name || 'Comunidad';
+    const address = incident.comunidades?.address || '';
+    
+    const content = `📋 CONFIRMACIÓN DE INCIDENCIA RECIBIDA
+
+Estimado/a ${incident.owner_name},
+
+Hemos recibido su reporte de incidencia y ya estamos gestionando la solución:
+
+📋 Título: ${incident.title}
+📍 Comunidad: ${community}
+🏠 Dirección: ${address}
+⚠️ Prioridad: ${getPriorityText(incident.priority)}
+📝 Descripción: ${incident.description}
+
+Nuestro equipo técnico especializado se pondrá en contacto con usted próximamente para coordinar la intervención.
+
+Le mantendremos informado del progreso.`;
+
+    const message = createWhatsAppMessage(content);
+    const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+}
+
+// ✅ FUNCIÓN CORREGIDA: Notificar a los industriales cuando se notifica al presidente
+async function notifyPresident(id) {
+    try {
+        console.log('🔔 Notificando presidente e industriales para incidencia:', id);
+        
+        const { data: incidentData, error: selectError } = await supabase
+            .from('incidencias')
+            .select('*, comunidades(name, address, president_name, president_phone)')
+            .eq('id', id)
+            .single();
+
+        if (selectError) {
+            console.error('Error al obtener incidencia:', selectError);
+            throw selectError;
+        }
+
+        console.log('📋 Datos incidencia obtenidos:', incidentData);
+
+        // Actualizar estado a notificado presidente
+        const { error: updateError } = await supabase
+            .from('incidencias')
+            .update({ status: INCIDENT_STATES.notified_president })
+            .eq('id', id);
+
+        if (updateError) {
+            console.error('Error al actualizar estado:', updateError);
+            throw updateError;
+        }
+
+        console.log('✅ Estado actualizado correctamente');
+
+        // Enviar notificación al presidente
+        sendPresidentNotification(incidentData);
+        
+        // ✅ AHORA SÍ: Notificar a los industriales para que vayan a trabajar
+        sendIndustrialsWorkNotification(incidentData);
+        
+        showNotification('Presidente e industriales notificados', 'success');
+        await loadIncidents();
+
+    } catch (error) {
+        console.error('❌ Error completo al notificar:', error);
+        showNotification(`Error al notificar: ${error.message}`, 'error');
+    }
+}
+
+// ✅ FUNCIÓN ACTUALIZADA: Cambio de estado manual
+async function updateIncidentStatus(id, status) {
+    try {
+        const { data: incidentData, error: selectError } = await supabase
+            .from('incidencias')
+            .select('*, comunidades(name, address, president_name, president_phone)')
+            .eq('id', id)
+            .single();
+
+        if (selectError) throw selectError;
+
+        const { error: updateError } = await supabase
+            .from('incidencias')
+            .update({ status })
+            .eq('id', id);
+
+        if (updateError) throw updateError;
+
+        showNotification('Estado actualizado', 'success');
+        await loadIncidents();
+
+        // Enviar reporte de finalización si se completa
+        if (status === INCIDENT_STATES.completed) {
+            sendCompletionReportToOwner(incidentData);
+        }
+        
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Error al actualizar', 'error');
+    }
+}
+
+async function deleteIncident(id) {
+    if (!confirm('¿Eliminar esta incidencia?')) return;
+    
+    try {
+        const { error } = await supabase.from('incidencias').delete().eq('id', id);
+        if (error) throw error;
+        showNotification('Incidencia eliminada', 'success');
+        await loadIncidents();
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Error al eliminar', 'error');
+    }
+}
+
+// Funciones de carga de datos desde Supabase
+async function loadAllData() {
+    await Promise.all([loadCommunities(), loadIndustrials(), loadIncidents()]);
+    updateStats();
+}
+
+async function loadCommunities() {
+    try {
+        const { data, error } = await supabase.from('comunidades').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        
+        communities = data || [];
+        loadCommunityOptions();
+        loadCommunitiesList();
+        updateStats();
+    } catch (error) {
+        console.error('Error loading communities:', error);
+    }
+}
+
+async function loadIndustrials() {
+    try {
+        const { data, error } = await supabase.from('industriales').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        
+        industrials = data || [];
+        loadIndustrialOptions();
+        loadIndustrialsList();
+        updateStats();
+    } catch (error) {
+        console.error('Error loading industrials:', error);
+    }
+}
+
+async function loadIncidents() {
+    try {
+        const { data, error } = await supabase
+            .from('incidencias')
+            .select(`*, comunidades(name, address), assigned_industrials`)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        incidents = data || [];
+        loadIncidentsList();
+        updateStats();
+    } catch (error) {
+        console.error('Error loading incidents:', error);
+    }
+}
+
+// Funciones UI optimizadas
+function loadCommunityOptions() {
+    const select = document.getElementById('communitySelect');
+    select.innerHTML = '<option value="">Seleccionar comunidad</option>' + 
+        communities.map(community => `<option value="${community.id}">${community.name}</option>`).join('');
+}
+
+function loadCommunitiesList() {
+    const container = document.getElementById('communitiesListContainer');
+    
+    if (communities.length === 0) {
+        container.innerHTML = '<div class="loading">No hay comunidades registradas</div>';
+        return;
+    }
+    
+    container.innerHTML = communities.map(community => `
+        <div class="incident-item">
+            <div class="incident-info">
+                <h3>🏢 ${community.name}</h3>
+                <p><strong>Dirección:</strong> ${community.address}</p>
+                <p><strong>Presidente:</strong> ${community.president_name}</p>
+                <p><strong>Teléfono:</strong> ${community.president_phone}</p>
+                <p><strong>Fecha:</strong> ${formatDate(community.created_at)}</p>
+            </div>
+            <div class="incident-actions">
+                <button class="btn btn-danger" onclick="deleteCommunity(${community.id})">🗑️ Eliminar</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function loadIndustrialOptions() {
+    const dropdown = document.getElementById('industrialDropdown');
+    
+    if (industrials.length === 0) {
+        dropdown.innerHTML = '<div style="padding: 15px; color: #666;">No hay industriales registrados</div>';
+        return;
+    }
+    
+    dropdown.innerHTML = industrials.map(industrial => `
+        <div class="industrial-option">
+            <input type="checkbox" class="industrial-checkbox" value="${industrial.id}"
+                   onchange="toggleIndustrialCheckbox(${industrial.id})">
+            <label>
+                <div style="font-weight: 500;">${industrial.name}</div>
+                <div style="font-size: 12px; color: #666;">${industrial.specialties}</div>
+            </label>
+        </div>
+    `).join('');
+    
+    updateIndustrialCheckboxes();
+}
+
+function loadIndustrialsList() {
+    const container = document.getElementById('industrialsListContainer');
+    
+    if (industrials.length === 0) {
+        container.innerHTML = '<div class="loading">No hay industriales registrados</div>';
+        return;
+    }
+    
+    container.innerHTML = industrials.map(industrial => `
+        <div class="incident-item">
+            <div class="incident-info">
+                <h3>👷 ${industrial.name}</h3>
+                <p><strong>Teléfono:</strong> ${industrial.phone}</p>
+                <p><strong>Especialidades:</strong> ${industrial.specialties}</p>
+                <p><strong>Fecha:</strong> ${formatDate(industrial.created_at)}</p>
+            </div>
+            <div class="incident-actions">
+                <button class="btn btn-danger" onclick="deleteIndustrial(${industrial.id})">🗑️ Eliminar</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ✅ FUNCIÓN ACTUALIZADA: Lista de incidencias con nuevos estados y botones
+function loadIncidentsList() {
+    const container = document.getElementById('incidentListContainer');
+    
+    if (incidents.length === 0) {
+        container.innerHTML = '<div class="loading">No hay incidencias registradas</div>';
+        return;
+    }
+    
+    container.innerHTML = incidents.map(incident => {
+        const communityName = incident.comunidades?.name || 'Comunidad no encontrada';
+        const assignedIndustrials = getAssignedIndustrialsNames(incident.assigned_industrials);
+        
+        return `
+            <div class="incident-item">
+                <div class="incident-info">
+                    <h3>${incident.title}</h3>
+                    <p><strong>Comunidad:</strong> ${communityName}</p>
+                    <p><strong>Propietario:</strong> ${incident.owner_name} - ${incident.owner_phone}</p>
+                    <p><strong>Industrial(es):</strong> ${assignedIndustrials}</p>
+                    <p><strong>Prioridad:</strong> ${getPriorityText(incident.priority)}</p>
+                    <p><strong>Descripción:</strong> ${incident.description}</p>
+                    <p><strong>Fecha:</strong> ${formatDate(incident.created_at)}</p>
+                </div>
+                <div class="incident-actions" style="display: flex; flex-direction: column; gap: 10px;">
+                    <span class="status-badge status-${incident.status}">${getStatusText(incident.status)}</span>
+                    ${getActionButtons(incident)}
+                    <button class="btn btn-whatsapp" onclick="sendFollowUpMessage(${incident.id})">📱 Seguimiento</button>
+                    <button class="btn btn-danger" onclick="deleteIncident(${incident.id})">🗑️ Eliminar</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getAssignedIndustrialsNames(assignedIds) {
+    if (!assignedIds || assignedIds.length === 0) return 'Sin asignar';
+    
+    return assignedIds.map(id => {
+        const industrial = industrials.find(i => i.id === id);
+        return industrial ? industrial.name : 'Desconocido';
+    }).join(', ');
+}
+
+// ✅ FUNCIÓN ACTUALIZADA: Botones según el estado CORREGIDO
+function getActionButtons(incident) {
+    switch (incident.status) {
+        case INCIDENT_STATES.created:
+            return `<button class="btn btn-primary" onclick="notifyIndustrial(${incident.id})">📧 Notificar Propietario</button>`;
+        
+        case INCIDENT_STATES.notified_industrial:
+            return `<button class="btn btn-info" onclick="notifyPresident(${incident.id})">📧 Notificar Presidente</button>`;
+        
+        case INCIDENT_STATES.notified_president:
+            return `<button class="btn btn-success" onclick="updateIncidentStatus(${incident.id}, '${INCIDENT_STATES.completed}')">✅ Marcar Completada</button>`;
+        
+        case INCIDENT_STATES.completed:
+            return `<span style="color: #28a745; font-weight: bold;">✅ Incidencia Completada</span>`;
+        
+        default:
+            return `<button class="btn btn-primary" onclick="notifyIndustrial(${incident.id})">📧 Notificar Propietario</button>`;
+    }
+}
+
+// Funciones Multi-select para Industriales
 function toggleIndustrialDropdown() {
-  const dropdown = qs('#industrialDropdown');
-  appState.isDropdownOpen = !appState.isDropdownOpen;
-  dropdown.style.display = appState.isDropdownOpen ? 'block' : 'none';
-  if (appState.isDropdownOpen) {
-    rebuildIndustrialDropdown();
-  }
+    document.getElementById('industrialDropdown').classList.toggle('active');
 }
 
-function rebuildIndustrialDropdown() {
-  const dropdown = qs('#industrialDropdown');
-  dropdown.innerHTML = '';
-  if (appState.industrials.length === 0) {
-    const info = document.createElement('div');
-    info.className = 'multi-select-item';
-    info.textContent = 'No hay industriales. Registre alguno primero.';
-    dropdown.appendChild(info);
-    return;
-  }
-  appState.industrials.forEach(ind => {
-    const row = document.createElement('div');
-    row.className = 'multi-select-item';
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = appState.selectedIndustrialIds.has(ind.id);
-    input.addEventListener('change', () => {
-      if (input.checked) appState.selectedIndustrialIds.add(ind.id);
-      else appState.selectedIndustrialIds.delete(ind.id);
-      updateSelectedIndustrialsDisplay();
+function closeIndustrialDropdown() {
+    document.getElementById('industrialDropdown').classList.remove('active');
+}
+
+function toggleIndustrialCheckbox(industrialId) {
+    const industrial = industrials.find(i => i.id === industrialId);
+    const index = selectedIndustrials.findIndex(i => i.id === industrialId);
+    
+    if (index > -1) {
+        selectedIndustrials.splice(index, 1);
+    } else {
+        selectedIndustrials.push(industrial);
+    }
+    
+    updateIndustrialSelection();
+    updateIndustrialCheckboxes();
+}
+
+function removeIndustrial(industrialId) {
+    selectedIndustrials = selectedIndustrials.filter(i => i.id !== industrialId);
+    updateIndustrialSelection();
+    updateIndustrialCheckboxes();
+}
+
+function updateIndustrialSelection() {
+    const textElement = document.getElementById('industrialSelectText');
+    const displayElement = document.getElementById('selectedIndustrialsDisplay');
+    
+    if (selectedIndustrials.length === 0) {
+        textElement.textContent = 'Seleccionar industriales';
+        displayElement.innerHTML = '';
+    } else {
+        textElement.textContent = `${selectedIndustrials.length} industrial(es) seleccionado(s)`;
+        displayElement.innerHTML = selectedIndustrials.map(industrial => `
+            <div class="selected-industrial-tag">
+                <span>${industrial.name}</span>
+                <span class="remove-tag" onclick="removeIndustrial(${industrial.id})">×</span>
+            </div>
+        `).join('');
+    }
+}
+
+function updateIndustrialCheckboxes() {
+    document.querySelectorAll('.industrial-checkbox').forEach(checkbox => {
+        const industrialId = parseInt(checkbox.value);
+        checkbox.checked = selectedIndustrials.some(i => i.id === industrialId);
     });
-    const label = document.createElement('label');
-    label.textContent = `${ind.name} (${ind.specialties.join(', ')})`;
-    row.appendChild(input);
-    row.appendChild(label);
-    dropdown.appendChild(row);
-  });
-  updateSelectedIndustrialsDisplay();
 }
 
-function updateSelectedIndustrialsDisplay() {
-  const container = qs('#selectedIndustrialsDisplay');
-  container.innerHTML = '';
-  const selected = appState.industrials.filter(i => appState.selectedIndustrialIds.has(i.id));
-  if (selected.length === 0) {
-    qs('#industrialSelectText').textContent = 'Seleccionar industriales';
-    return;
-  }
-  qs('#industrialSelectText').textContent = `${selected.length} seleccionado(s)`;
-  selected.forEach(ind => {
-    const chip = document.createElement('span');
-    chip.className = 'chip';
-    chip.innerHTML = `${ind.name} <button class="remove" aria-label="Quitar">✕</button>`;
-    chip.querySelector('button').addEventListener('click', () => {
-      appState.selectedIndustrialIds.delete(ind.id);
-      rebuildIndustrialDropdown();
+// WhatsApp Integration
+function createWhatsAppMessage(content) {
+    return `🏢 *FINCAS TOMÁS*\n\n${content}\n\n---\nContacto: Fincas Tomás\nGestión Profesional de Comunidades`;
+}
+
+// ✅ NUEVA FUNCIÓN: Notificar a los industriales para trabajar
+function sendIndustrialsWorkNotification(incidentData) {
+    const community = communities.find(c => c.id === incidentData.community_id);
+    
+    // Obtener los industriales asignados para esta incidencia
+    const assignedIndustrials = incidentData.assigned_industrials.map(id => 
+        industrials.find(i => i.id === id)
+    ).filter(Boolean);
+    
+    console.log('👷 Notificando a industriales:', assignedIndustrials);
+    
+    assignedIndustrials.forEach((industrial, index) => {
+        setTimeout(() => {
+            const direccion = encodeURIComponent(community.address);
+            const mapsLink = `https://www.google.com/maps/search/?api=1&query=${direccion}`;
+            
+            const content = `🔧 TRABAJO APROBADO - PROCEDER CON REPARACIÓN
+
+📋 Título: ${incidentData.title}
+⚠️ Prioridad: ${getPriorityText(incidentData.priority)}
+📍 Comunidad: ${community.name}
+🏠 Dirección: ${community.address}
+🌍 Ver en Google Maps: ${mapsLink}
+👤 Propietario: ${incidentData.owner_name} - ${incidentData.owner_phone}
+📝 Descripción: ${incidentData.description}
+
+✅ El presidente de la comunidad ha sido informado.
+🔧 Puede proceder con la reparación.
+
+Por favor, confirme cuando comience el trabajo.`;
+
+            const message = createWhatsAppMessage(content);
+            const whatsappUrl = `https://wa.me/${industrial.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
+            window.open(whatsappUrl, '_blank');
+        }, index * 1000);
     });
-    container.appendChild(chip);
-  });
 }
 
+// ✅ NUEVA FUNCIÓN: Notificar al presidente
+function sendPresidentNotification(incident) {
+    const phone = incident.comunidades.president_phone.replace(/[^0-9]/g, '');
+    const community = incident.comunidades?.name || 'Comunidad';
+    const address = incident.comunidades?.address || '';
+    
+    const content = `📋 INFORME DE INCIDENCIA EN SU COMUNIDAD
+
+Estimado/a Presidente/a,
+
+Le informamos sobre una incidencia reportada en su comunidad:
+
+📋 Título: ${incident.title}
+📍 Comunidad: ${community}
+🏠 Dirección: ${address}
+👤 Propietario: ${incident.owner_name} - ${incident.owner_phone}
+📝 Descripción: ${incident.description}
+⚠️ Prioridad: ${getPriorityText(incident.priority)}
+
+Ya hemos notificado a nuestro equipo técnico para proceder con la reparación.
+
+Le mantendremos informado del progreso.`;
+
+    const message = createWhatsAppMessage(content);
+    const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+}
+
+// ✅ NUEVA FUNCIÓN: Notificar finalización al propietario
+function sendCompletionReportToOwner(incident) {
+    const phone = incident.owner_phone.replace(/[^0-9]/g, '');
+    const community = incident.comunidades?.name || 'Comunidad';
+    const address = incident.comunidades?.address || '';
+    
+    const completionDate = new Date().toLocaleDateString('es-ES', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+
+    const content = `✅ INCIDENCIA COMPLETADA
+
+Estimado/a ${incident.owner_name},
+
+Su incidencia "${incident.title}" ha sido completada satisfactoriamente.
+
+📍 Comunidad: ${community}
+🏠 Dirección: ${address}
+📝 Descripción original: ${incident.description}
+🗓 Fecha de finalización: ${completionDate}
+
+El trabajo ha sido realizado por nuestro equipo técnico especializado.
+
+Si tiene alguna duda o consulta adicional, no dude en contactarnos.
+
+¡Gracias por confiar en nosotros!`;
+
+    const message = createWhatsAppMessage(content);
+    const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+}
+
+async function sendFollowUpMessage(incidentId) {
+    const incident = incidents.find(inc => inc.id === incidentId);
+    if (!incident) return;
+    
+    const assignedIndustrials = incident.assigned_industrials.map(id => 
+        industrials.find(i => i.id === id)
+    ).filter(Boolean);
+    
+    const content = `📋 SEGUIMIENTO DE INCIDENCIA
+
+Título: ${incident.title}
+Comunidad: ${incident.comunidades?.name}
+Estado actual: ${getStatusText(incident.status)}
+
+¿Hay alguna actualización sobre esta incidencia?`;
+
+    const message = createWhatsAppMessage(content);
+
+    assignedIndustrials.forEach((industrial, index) => {
+        setTimeout(() => {
+            const whatsappUrl = `https://wa.me/${industrial.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
+            window.open(whatsappUrl, '_blank');
+        }, index * 500);
+    });
+    
+    showNotification('Mensajes de seguimiento enviados', 'info');
+}
+
+// Estadísticas clickeables
+function updateStats() {
+    const stats = {
+        total: incidents.length,
+        pending: incidents.filter(inc => inc.status === INCIDENT_STATES.created).length,
+        scheduled: incidents.filter(inc => inc.status === INCIDENT_STATES.notified_industrial).length,
+        completed: incidents.filter(inc => inc.status === INCIDENT_STATES.completed).length,
+        communities: communities.length,
+        industrials: industrials.length
+    };
+    
+    const elements = [
+        ['totalIncidents', stats.total],
+        ['pendingIncidents', stats.pending],
+        ['scheduledIncidents', stats.scheduled],
+        ['completedIncidents', stats.completed],
+        ['totalCommunities', stats.communities],
+        ['totalIndustrials', stats.industrials]
+    ];
+    
+    elements.forEach(([elementId, value]) => {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.textContent = value;
+        }
+    });
+}
+
+function navigateToTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+    
+    const targetTab = document.getElementById(tabName);
+    if (targetTab) {
+        targetTab.classList.add('active');
+        
+        const navButtons = {
+            'incidentList': 'Lista de Incidencias',
+            'communities': 'Comunidades', 
+            'industrials': 'Industriales'
+        };
+        
+        document.querySelectorAll('.tab').forEach(tab => {
+            if (tab.textContent.trim() === navButtons[tabName]) {
+                tab.classList.add('active');
+            }
+        });
+        
+        const loaders = {
+            'incidentList': loadIncidentsList,
+            'communities': loadCommunitiesList,
+            'industrials': loadIndustrialsList
+        };
+        
+        if (loaders[tabName]) loaders[tabName]();
+        
+        console.log(`📍 Navegando a: ${tabName}`);
+    }
+}
+
+// Utilidades
+function validatePhone(phone) {
+    return /^(\+34|0034|34)?[6-9]\d{8}$/.test(phone.replace(/\s/g, ''));
+}
+
+function showFieldError(fieldId, errors) {
+    const field = document.getElementById(fieldId);
+    const errorElement = document.getElementById(fieldId + 'Error');
+    const formGroup = field?.closest('.form-group');
+    
+    if (formGroup && errorElement) {
+        formGroup.classList.add('error');
+        errorElement.textContent = errors[0];
+        errorElement.style.display = 'block';
+    }
+}
+
+function clearAllErrors() {
+    document.querySelectorAll('.error-message').forEach(el => {
+        el.textContent = '';
+        el.style.display = 'none';
+    });
+    document.querySelectorAll('.form-group').forEach(group => {
+        group.classList.remove('error');
+    });
+}
+
+function showNotification(message, type = 'info') {
+    const container = document.getElementById('notificationContainer');
+    if (!container) return;
+    
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    
+    container.appendChild(notification);
+    setTimeout(() => notification.remove(), 4000);
+}
+
+function formatDate(dateString) {
+    return new Date(dateString).toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function getPriorityText(priority) {
+    const priorities = {
+        low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'Urgente'
+    };
+    return priorities[priority] || priority;
+}
+
+function getStatusText(status) {
+    const statuses = {
+        [INCIDENT_STATES.created]: 'Creada',
+        [INCIDENT_STATES.notified_industrial]: 'Notificada Industrial',
+        [INCIDENT_STATES.notified_president]: 'Notificada Presidente',
+        [INCIDENT_STATES.completed]: 'Completada',
+        // Mantener compatibilidad con estados anteriores
+        pending: 'Pendiente',
+        scheduled: 'Programada',
+        completed: 'Completada'
+    };
+    return statuses[status] || status;
+}
+
+// Gestión de pestañas
+function showTab(tabName, event) {
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+    
+    document.getElementById(tabName).classList.add('active');
+    if (event) event.target.classList.add('active');
+    
+    const loaders = {
+        'incidentList': loadIncidentsList,
+        'communities': loadCommunitiesList,
+        'industrials': loadIndustrialsList
+    };
+    
+    if (loaders[tabName]) loaders[tabName]();
+}
+
+// Exponer funciones al ámbito global para uso en atributos onclick
+window.logout = logout;
+window.showTab = showTab;
+window.navigateToTab = navigateToTab;
 window.toggleIndustrialDropdown = toggleIndustrialDropdown;
-
-// Close dropdown when clicking outside
-window.addEventListener('click', (e) => {
-  const container = e.target.closest('.multi-select-container');
-  if (!container) {
-    const dropdown = qs('#industrialDropdown');
-    dropdown.style.display = 'none';
-    appState.isDropdownOpen = false;
-  }
-});
-
-// Lists renderers
-function renderIncidentList() {
-  const container = qs('#incidentListContainer');
-  const term = (qs('#incidentSearch').value || '').toLowerCase();
-  const communitiesById = new Map(appState.communities.map(c => [c.id, c]));
-  const industrialsById = new Map(appState.industrials.map(i => [i.id, i]));
-
-  const filtered = appState.incidents.filter(inc => {
-    const inTitle = inc.title.toLowerCase().includes(term);
-    const inDesc = inc.description.toLowerCase().includes(term);
-    const comm = communitiesById.get(inc.communityId)?.name || '';
-    const inCommunity = comm.toLowerCase().includes(term);
-    return !term || inTitle || inDesc || inCommunity;
-  });
-
-  if (filtered.length === 0) {
-    container.innerHTML = '<div class="card">Sin incidencias</div>';
-    return;
-  }
-
-  container.innerHTML = '';
-  filtered.forEach(inc => {
-    const card = document.createElement('div');
-    card.className = 'card';
-
-    const title = document.createElement('div');
-    title.className = 'card-title';
-    title.textContent = inc.title;
-
-    const subtitle = document.createElement('div');
-    subtitle.className = 'card-subtitle';
-    const communityName = communitiesById.get(inc.communityId)?.name || '—';
-    subtitle.textContent = `${communityName} • ${new Date(inc.createdAt).toLocaleString()}`;
-
-    const row = document.createElement('div');
-    row.className = 'card-row';
-
-    const priority = document.createElement('span');
-    priority.className = `badge ${inc.priority}`;
-    priority.textContent = `Prioridad: ${translatePriority(inc.priority)}`;
-
-    const statusSelect = document.createElement('select');
-    statusSelect.className = 'status-select';
-    ;['pending','scheduled','completed'].forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s;
-      opt.textContent = translateStatus(s);
-      if (inc.status === s) opt.selected = true;
-      statusSelect.appendChild(opt);
-    });
-    statusSelect.addEventListener('change', () => {
-      inc.status = statusSelect.value;
-      inc.updatedAt = new Date().toISOString();
-      saveToStorage();
-      renderStats();
-    });
-
-    const assignees = document.createElement('div');
-    assignees.textContent = 'Asignados: ' + (inc.industrialIds.map(id => industrialsById.get(id)?.name || '—').join(', ') || '—');
-
-    const desc = document.createElement('div');
-    desc.textContent = inc.description;
-
-    row.appendChild(priority);
-    row.appendChild(statusSelect);
-
-    card.appendChild(title);
-    card.appendChild(subtitle);
-    card.appendChild(row);
-    card.appendChild(assignees);
-    card.appendChild(desc);
-
-    container.appendChild(card);
-  });
-}
-
-function translatePriority(p) {
-  switch (p) {
-    case 'low': return 'Baja';
-    case 'medium': return 'Media';
-    case 'high': return 'Alta';
-    case 'urgent': return 'Urgente';
-    default: return p;
-  }
-}
-
-function translateStatus(s) {
-  switch (s) {
-    case 'pending': return 'Pendiente';
-    case 'scheduled': return 'Programada';
-    case 'completed': return 'Completada';
-    default: return s;
-  }
-}
-
-function renderIndustrialsList() {
-  const container = qs('#industrialsListContainer');
-  const term = (qs('#industrialSearch').value || '').toLowerCase();
-  const filtered = appState.industrials.filter(ind =>
-    !term || ind.name.toLowerCase().includes(term) || ind.specialties.join(', ').toLowerCase().includes(term)
-  );
-
-  if (filtered.length === 0) {
-    container.innerHTML = '<div class="card">Sin industriales</div>';
-    return;
-  }
-
-  container.innerHTML = '';
-  filtered.forEach(ind => {
-    const card = document.createElement('div');
-    card.className = 'card';
-    const title = document.createElement('div');
-    title.className = 'card-title';
-    title.textContent = ind.name;
-    const subtitle = document.createElement('div');
-    subtitle.className = 'card-subtitle';
-    subtitle.textContent = `${ind.phone} • ${ind.specialties.join(', ')}`;
-
-    card.appendChild(title);
-    card.appendChild(subtitle);
-    container.appendChild(card);
-  });
-}
-
-function renderCommunitiesList() {
-  const container = qs('#communitiesListContainer');
-  const term = (qs('#communitySearch').value || '').toLowerCase();
-  const filtered = appState.communities.filter(c => !term || c.name.toLowerCase().includes(term) || c.address.toLowerCase().includes(term));
-
-  if (filtered.length === 0) {
-    container.innerHTML = '<div class="card">Sin comunidades</div>';
-    return;
-  }
-
-  container.innerHTML = '';
-  filtered.forEach(c => {
-    const card = document.createElement('div');
-    card.className = 'card';
-    const title = document.createElement('div');
-    title.className = 'card-title';
-    title.textContent = c.name;
-    const subtitle = document.createElement('div');
-    subtitle.className = 'card-subtitle';
-    subtitle.textContent = `${c.address} • Presidente: ${c.presidentName} (${c.presidentPhone})`;
-    card.appendChild(title);
-    card.appendChild(subtitle);
-    container.appendChild(card);
-  });
-}
-
-function renderStats() {
-  const total = appState.incidents.length;
-  const pending = appState.incidents.filter(i => i.status === 'pending').length;
-  const scheduled = appState.incidents.filter(i => i.status === 'scheduled').length;
-  const completed = appState.incidents.filter(i => i.status === 'completed').length;
-
-  qs('#totalIncidents').textContent = String(total);
-  qs('#pendingIncidents').textContent = String(pending);
-  qs('#scheduledIncidents').textContent = String(scheduled);
-  qs('#completedIncidents').textContent = String(completed);
-  qs('#totalCommunities').textContent = String(appState.communities.length);
-  qs('#totalIndustrials').textContent = String(appState.industrials.length);
-}
-
-function populateCommunitySelect() {
-  const select = qs('#communitySelect');
-  if (!select) return;
-  const prev = select.value;
-  select.innerHTML = '<option value="">Seleccionar comunidad</option>';
-  appState.communities.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.id;
-    opt.textContent = c.name;
-    select.appendChild(opt);
-  });
-  // keep value if exists
-  if (prev) select.value = prev;
-}
-
-function renderAll() {
-  renderStats();
-  populateCommunitySelect();
-  renderIncidentList();
-  renderIndustrialsList();
-  renderCommunitiesList();
-}
-
-function setupSearches() {
-  qs('#incidentSearch')?.addEventListener('input', renderIncidentList);
-  qs('#industrialSearch')?.addEventListener('input', renderIndustrialsList);
-  qs('#communitySearch')?.addEventListener('input', renderCommunitiesList);
-}
-
-function bootstrap() {
-  loadFromStorage();
-  setupLogin();
-  setupIncidentForm();
-  setupIndustrialForm();
-  setupCommunityForm();
-  setupSearches();
-
-  if (appState.currentUser) {
-    qs('#currentUserDisplay').textContent = `👋 ${appState.currentUser.username}`;
-    qs('#loginScreen').style.display = 'none';
-    qs('#dashboard').style.display = 'block';
-    renderAll();
-  } else {
-    qs('#loginScreen').style.display = 'grid';
-    qs('#dashboard').style.display = 'none';
-  }
-}
-
-document.addEventListener('DOMContentLoaded', bootstrap);
+window.toggleIndustrialCheckbox = toggleIndustrialCheckbox;
+window.removeIndustrial = removeIndustrial;
+window.notifyIndustrial = notifyIndustrial;
+window.notifyPresident = notifyPresident;
+window.updateIncidentStatus = updateIncidentStatus;
+window.deleteIncident = deleteIncident;
+window.sendFollowUpMessage = sendFollowUpMessage;
+window.deleteIndustrial = deleteIndustrial;
+window.deleteCommunity = deleteCommunity;

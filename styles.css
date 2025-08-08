@@ -355,3 +355,69 @@ body {
 
 .notification.success { background: var(--success); }
 .notification.error { background: var(--danger); }
+
+/* Additional styles for Supabase-integrated UI */
+.incident-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.incident-item:last-child { border-bottom: none; }
+
+.incident-info h3 {
+  margin: 0 0 6px 0;
+}
+
+.incident-actions .btn { width: 100%; }
+
+/* Status badges */
+.status-badge {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #111827;
+  background: #e5e7eb;
+}
+.status-creada { background: #fde68a; }
+.status-notificada_industrial { background: #bfdbfe; }
+.status-notificada_presidente { background: #ddd6fe; }
+.status-completada { background: #bbf7d0; }
+
+/* Buttons variants */
+.btn.btn-info { background: #0ea5e9; }
+.btn.btn-whatsapp { background: #22c55e; }
+
+/* Industrial multi-select */
+.industrial-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.industrial-option:last-child { border-bottom: none; }
+
+.selected-industrial-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f3f4f6;
+  border-radius: 999px;
+}
+.selected-industrial-tag .remove-tag {
+  cursor: pointer;
+}
+
+/* Dropdown active state */
+.multi-select-dropdown.active { display: block; }
+
+/* Loading text */
+.loading {
+  padding: 16px;
+  color: var(--muted);
+}

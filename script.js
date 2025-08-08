@@ -229,7 +229,7 @@ async function handleIncidentSubmit(e) {
     
     console.log('🔍 Iniciando creación de incidencia...');
     
-    const elements = ['incidentTitle', 'priority', 'communitySelect', 'ownerName', 'ownerPhone', 'incidentDescription']
+    const elements = ['incidentTitle', 'priority', 'communitySelect', 'incidentDescription']
         .map(id => ({ id, el: document.getElementById(id) }));
     
     if (elements.some(({ el, id }) => !el && console.error(`❌ ${id} no encontrado`))) {
@@ -237,13 +237,17 @@ async function handleIncidentSubmit(e) {
         return;
     }
     
+    // Owner data comes from selected community (president)
+    const selectedCommunityId = parseInt(elements[2].el.value) || null;
+    const selectedCommunity = communities.find(c => c.id === selectedCommunityId);
+
     const data = {
         title: elements[0].el.value.trim(),
         priority: elements[1].el.value,
-        community_id: parseInt(elements[2].el.value) || null,
-        owner_name: elements[3].el.value.trim(),
-        owner_phone: elements[4].el.value.trim(),
-        description: elements[5].el.value.trim(),
+        community_id: selectedCommunityId,
+        owner_name: selectedCommunity ? selectedCommunity.president_name : '',
+        owner_phone: selectedCommunity ? selectedCommunity.president_phone : '',
+        description: elements[3].el.value.trim(),
         assigned_industrials: selectedIndustrials.map(i => i.id),
         status: INCIDENT_STATES.created
     };
@@ -280,8 +284,6 @@ function validateIncidentData(data) {
         [!data.title || data.title.length < 3, 'incidentTitle', 'Título muy corto (mínimo 3 caracteres)'],
         [!data.priority, 'priority', 'Seleccione prioridad'],
         [!data.community_id || isNaN(data.community_id), 'communitySelect', 'Seleccione comunidad'],
-        [!data.owner_name || data.owner_name.length < 2, 'ownerName', 'Nombre muy corto (mínimo 2 caracteres)'],
-        [!data.owner_phone || !validatePhone(data.owner_phone), 'ownerPhone', 'Teléfono inválido'],
         [!selectedIndustrials || selectedIndustrials.length === 0, 'industrials', 'Seleccione al menos un industrial'],
         [!data.description || data.description.length < 5, 'incidentDescription', 'Descripción muy corta (mínimo 5 caracteres)']
     ];

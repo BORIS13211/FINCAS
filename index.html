@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión de Incidencias</title>
+    <link rel="stylesheet" href="styles.css">   <!-- ✅ Esto carga bien el CSS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div class="login-container" id="loginScreen">
+        <div class="login-box">
+            <div class="logo">
+                <h1>🏢 Sistema de Incidencias</h1>
+                <p>Gestión Profesional de Comunidades</p>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Usuario</label>
+                    <input type="text" id="username" required>
+                    <span class="error-message" id="usernameError"></span>
+                </div>
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" required>
+                    <span class="error-message" id="passwordError"></span>
+                </div>
+                <button type="submit" class="login-btn">Iniciar Sesión</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard" id="dashboard" style="display:none;">
+        <header class="header">
+            <div class="header-content">
+                <h1>🏢 Sistema de Gestión de Incidencias</h1>
+                <div class="user-info">
+                    <span id="currentUserDisplay"></span>
+                    <button class="logout-btn" onclick="logout()">Cerrar Sesión</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- ✅ Stats Cards CLICKEABLES -->
+            <div class="stats">
+                <div class="stat-card clickable-stat" onclick="navigateToTab('incidentList')" title="Click para ver todas las incidencias">
+                    <div class="stat-number" id="totalIncidents">0</div>
+                    <div class="stat-label">Total Incidencias</div>
+                </div>
+                <div class="stat-card clickable-stat" onclick="navigateToTab('incidentList')" title="Click para ver incidencias pendientes">
+                    <div class="stat-number" id="pendingIncidents">0</div>
+                    <div class="stat-label">Pendientes</div>
+                </div>
+                <div class="stat-card clickable-stat" onclick="navigateToTab('incidentList')" title="Click para ver incidencias programadas">
+                    <div class="stat-number" id="scheduledIncidents">0</div>
+                    <div class="stat-label">Programadas</div>
+                </div>
+                <div class="stat-card clickable-stat" onclick="navigateToTab('incidentList')" title="Click para ver incidencias completadas">
+                    <div class="stat-number" id="completedIncidents">0</div>
+                    <div class="stat-label">Completadas</div>
+                </div>
+                <div class="stat-card clickable-stat" onclick="navigateToTab('communities')" title="Click para ver comunidades">
+                    <div class="stat-number" id="totalCommunities">0</div>
+                    <div class="stat-label">Comunidades</div>
+                </div>
+                <div class="stat-card clickable-stat" onclick="navigateToTab('industrials')" title="Click para ver industriales">
+                    <div class="stat-number" id="totalIndustrials">0</div>
+                    <div class="stat-label">Industriales</div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" onclick='showTab("newIncident", event)'>Nueva Incidencia</button>
+                <button class="tab" onclick='showTab("incidentList", event)'>Lista de Incidencias</button>
+                <button class="tab" onclick='showTab("industrials", event)'>Industriales</button>
+                <button class="tab" onclick='showTab("communities", event)'>Comunidades</button>
+            </div>
+
+            <!-- Nueva Incidencia Tab -->
+            <div class="tab-content active" id="newIncident">
+                <div class="form-container">
+                    <h2>Reportar Nueva Incidencia</h2>
+                    <form id="incidentForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="incidentTitle">Título de la Incidencia</label>
+                                <input type="text" id="incidentTitle" required>
+                                <span class="error-message" id="incidentTitleError"></span>
+                            </div>
+                            <div class="form-group">
+                                <label for="priority">Prioridad</label>
+                                <select id="priority" required>
+                                    <option value="">Seleccionar prioridad</option>
+                                    <option value="low">Baja</option>
+                                    <option value="medium">Media</option>
+                                    <option value="high">Alta</option>
+                                    <option value="urgent">Urgente</option>
+                                </select>
+                                <span class="error-message" id="priorityError"></span>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="communitySelect">Seleccionar Comunidad</label>
+                                <select id="communitySelect" required>
+                                    <option value="">Seleccionar comunidad</option>
+                                </select>
+                                <span class="error-message" id="communitySelectError"></span>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="ownerName">Nombre del Propietario</label>
+                                <input type="text" id="ownerName" required>
+                                <span class="error-message" id="ownerNameError"></span>
+                            </div>
+                            <div class="form-group">
+                                <label for="ownerPhone">Teléfono del Propietario</label>
+                                <input type="tel" id="ownerPhone" required>
+                                <span class="error-message" id="ownerPhoneError"></span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="industrialSelect">Industriales Asignados</label>
+                            <div class="multi-select-container">
+                                <div class="multi-select-header" onclick="toggleIndustrialDropdown()">
+                                    <span id="industrialSelectText">Seleccionar industriales</span>
+                                    <span class="dropdown-arrow">▼</span>
+                                </div>
+                                <div class="multi-select-dropdown" id="industrialDropdown"></div>
+                            </div>
+                            <div class="selected-items-display" id="selectedIndustrialsDisplay"></div>
+                            <span class="error-message" id="industrialsError"></span>
+                        </div>
+                        <div class="form-group">
+                            <label for="incidentDescription">Descripción de la Incidencia</label>
+                            <textarea id="incidentDescription" rows="4" required></textarea>
+                            <span class="error-message" id="incidentDescriptionError"></span>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 15px; font-size: 16px;">
+                            Reportar Incidencia
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Lista de Incidencias Tab -->
+            <div class="tab-content" id="incidentList">
+                <div class="incident-list">
+                    <h2 style="padding: 20px; margin: 0; border-bottom: 1px solid #eee;">Lista de Incidencias</h2>
+                    <div class="search-bar">
+                        <input type="text" id="incidentSearch" placeholder="🔍 Buscar incidencias...">
+                    </div>
+                    <div id="incidentListContainer"></div>
+                </div>
+            </div>
+
+            <!-- Industriales Tab -->
+            <div class="tab-content" id="industrials">
+                <div class="form-container">
+                    <h2>Registro de Industriales</h2>
+                    <form id="industrialForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="industrialName">Nombre del Industrial</label>
+                                <input type="text" id="industrialName" required>
+                                <span class="error-message" id="industrialNameError"></span>
+                            </div>
+                            <div class="form-group">
+                                <label for="industrialPhone">Teléfono del Industrial</label>
+                                <input type="tel" id="industrialPhone" required>
+                                <span class="error-message" id="industrialPhoneError"></span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="industrialSpecialties">Especialidades</label>
+                            <!-- ✅ ESPECIALIDADES ACTUALIZADAS CON LIMPIEZA -->
+                            <div class="specialties-container">
+                                <div class="specialty-item">
+                                    <input type="checkbox" id="maintenance" value="Mantenimiento" name="specialties">
+                                    <label for="maintenance">🔧 Mantenimiento</label>
+                                </div>
+                                <div class="specialty-item">
+                                    <input type="checkbox" id="pools" value="Piscinas" name="specialties">
+                                    <label for="pools">🏊‍♂️ Piscinas</label>
+                                </div>
+                                <div class="specialty-item">
+                                    <input type="checkbox" id="electricity" value="Electricidad" name="specialties">
+                                    <label for="electricity">⚡ Electricidad</label>
+                                </div>
+                                <div class="specialty-item">
+                                    <input type="checkbox" id="plumbing" value="Fontanería" name="specialties">
+                                    <label for="plumbing">🚿 Fontanería</label>
+                                </div>
+                                <div class="specialty-item">
+                                    <input type="checkbox" id="masonry" value="Albañilería" name="specialties">
+                                    <label for="masonry">🧱 Albañilería</label>
+                                </div>
+                                <div class="specialty-item">
+                                    <input type="checkbox" id="carpentry" value="Carpintería" name="specialties">
+                                    <label for="carpentry">🪚 Carpintería</label>
+                                </div>
+                                <!-- ✅ NUEVA ESPECIALIDAD AÑADIDA -->
+                                <div class="specialty-item">
+                                    <input type="checkbox" id="cleaning" value="Limpieza" name="specialties">
+                                    <label for="cleaning">🧹 Limpieza</label>
+                                </div>
+                            </div>
+                            <span class="error-message" id="specialtiesError"></span>
+                        </div>
+                        <button type="submit" class="btn btn-success" style="width: 100%; padding: 15px; font-size: 16px;">
+                            Registrar Industrial
+                        </button>
+                    </form>
+                </div>
+                <div class="incident-list">
+                    <h3 style="padding: 20px; margin: 0; border-bottom: 1px solid #eee;">Industriales Registrados</h3>
+                    <div class="search-bar">
+                        <input type="text" id="industrialSearch" placeholder="🔍 Buscar industriales...">
+                    </div>
+                    <div id="industrialsListContainer"></div>
+                </div>
+            </div>
+
+            <!-- Comunidades Tab -->
+            <div class="tab-content" id="communities">
+                <div class="form-container">
+                    <h2>Gestión de Comunidades</h2>
+                    <form id="communityForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="communityName">Nombre de la Comunidad</label>
+                                <input type="text" id="communityName" required>
+                                <span class="error-message" id="communityNameError"></span>
+                            </div>
+                            <div class="form-group">
+                                <label for="communityAddress">Dirección</label>
+                                <input type="text" id="communityAddress" required>
+                                <span class="error-message" id="communityAddressError"></span>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="presidentName">Nombre del Presidente</label>
+                                <input type="text" id="presidentName" required>
+                                <span class="error-message" id="presidentNameError"></span>
+                            </div>
+                            <div class="form-group">
+                                <label for="presidentPhone">Teléfono del Presidente</label>
+                                <input type="tel" id="presidentPhone" required>
+                                <span class="error-message" id="presidentPhoneError"></span>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-success" style="width: 100%; padding: 15px; font-size: 16px;">
+                            Agregar Comunidad
+                        </button>
+                    </form>
+                </div>
+                <div class="incident-list">
+                    <h3 style="padding: 20px; margin: 0; border-bottom: 1px solid #eee;">Comunidades Registradas</h3>
+                    <div class="search-bar">
+                        <input type="text" id="communitySearch" placeholder="🔍 Buscar comunidades...">
+                    </div>
+                    <div id="communitiesListContainer"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Container -->
+    <div class="notification-container" id="notificationContainer"></div>
+
+    <!-- ✅ ESTILOS ADICIONALES PARA ESTADÍSTICAS CLICKEABLES -->
+    <style>
+        /* ✅ ESTILOS PARA ESTADÍSTICAS CLICKEABLES */
+        .clickable-stat {
+            cursor: pointer !important;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .clickable-stat:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-color: #4CAF50;
+        }
+
+        .clickable-stat:hover .stat-number {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .stat-number {
+            transition: color 0.3s ease;
+        }
+
+        /* ✅ ESTILOS MEJORADOS PARA ESPECIALIDADES */
+        .specialties-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .specialty-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .specialty-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .specialty-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        .specialty-item label {
+            cursor: pointer;
+            font-weight: 500;
+            margin: 0;
+        }
+    </style>
+
+    <!-- Tu script personalizado -->
+    <script src="script.js"></script>
+</body>
+</html>

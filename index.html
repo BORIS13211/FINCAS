@@ -9,7 +9,7 @@
 </head>
 <body>
     <!-- Login Screen -->
-    <div class="login-container" id="loginScreen">
+    <div class="login-container" id="loginScreen" style="display: grid;">
         <div class="login-box">
             <div class="logo">
                 <h1>🏢 Sistema de Incidencias</h1>
@@ -126,7 +126,7 @@
                         </div>
                         <div class="form-group">
                             <label for="industrialSelect">Industriales Asignados</label>
-                            <div class="multi-select-container">
+                            <div class="multi-select-container" id="industrials">
                                 <div class="multi-select-header" onclick="toggleIndustrialDropdown()">
                                     <span id="industrialSelectText">Seleccionar industriales</span>
                                     <span class="dropdown-arrow">▼</span>
@@ -179,7 +179,7 @@
                         <div class="form-group">
                             <label for="industrialSpecialties">Especialidades</label>
                             <!-- ✅ ESPECIALIDADES ACTUALIZADAS CON LIMPIEZA -->
-                            <div class="specialties-container">
+                            <div id="specialties" class="specialties-container">
                                 <div class="specialty-item">
                                     <input type="checkbox" id="maintenance" value="Mantenimiento" name="specialties">
                                     <label for="maintenance">🔧 Mantenimiento</label>

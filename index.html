@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión de Incidencias</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Contenedor de notificaciones -->
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <!-- Pantalla de login -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <h1>🏢 Sistema de Gestión de Incidencias</h1>
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="username">Usuario:</label>
+                    <input type="text" id="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Contraseña:</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Iniciar Sesión</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard principal -->
+    <div id="dashboard" class="dashboard" style="display: none;">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>🏢 Sistema de Gestión de Incidencias</h1>
+                <button onclick="logout()" class="btn btn-secondary">Cerrar Sesión</button>
+            </div>
+        </header>
+
+        <!-- Estadísticas -->
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-number" id="totalIncidents">0</div>
+                <div class="stat-label">Total Incidencias</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="pendingIncidents">0</div>
+                <div class="stat-label">Pendientes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="assignedIncidents">0</div>
+                <div class="stat-label">Programadas</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="completedIncidents">0</div>
+                <div class="stat-label">Completadas</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalCommunities">0</div>
+                <div class="stat-label">Comunidades</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalIndustrials">0</div>
+                <div class="stat-label">Industriales</div>
+            </div>
+        </div>
+
+        <!-- Navegación por tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('reportIncident', event)">📝 Reportar Incidencia</button>
+            <button class="tab" onclick="showTab('incidentList', event)">📋 Lista de Incidencias</button>
+            <button class="tab" onclick="showTab('visitSchedule', event)">📅 Programar Visitas</button>
+            <button class="tab" onclick="showTab('communities', event)">🏢 Comunidades</button>
+            <button class="tab" onclick="showTab('industrials', event)">👷 Industriales</button>
+        </div>
+
+        <!-- Contenido de tabs -->
+        <div class="content">
+            <!-- Tab: Reportar Incidencia -->
+            <div id="reportIncident" class="tab-content active">
+                <h2>📝 Reportar Nueva Incidencia</h2>
+                <form id="incidentForm" class="form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="incidentTitle">Título de la Incidencia:</label>
+                            <input type="text" id="incidentTitle" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="priority">Prioridad:</label>
+                            <select id="priority" required>
+                                <option value="">Seleccionar prioridad</option>
+                                <option value="low">Baja</option>
+                                <option value="medium">Media</option>
+                                <option value="high">Alta</option>
+                                <option value="urgent">Urgente</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="communitySelect">Comunidad:</label>
+                            <select id="communitySelect" onchange="loadCommunityData()" required>
+                                <option value="">Seleccionar comunidad</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="communityDataContainer" style="display: none;" class="community-data">
+                        <h4>📍 Datos de la Comunidad</h4>
+                        <div id="communityDataDisplay"></div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="ownerName">Nombre del Propietario:</label>
+                            <input type="text" id="ownerName" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="ownerPhone">Teléfono del Propietario:</label>
+                            <input type="tel" id="ownerPhone" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Industriales Asignados:</label>
+                        <div class="multi-select-container">
+                            <div class="multi-select-header" onclick="toggleIndustrialDropdown()">
+                                <span id="industrialSelectText">Seleccionar industriales</span>
+                                <span class="dropdown-arrow">▼</span>
+                            </div>
+                            <div id="industrialDropdown" class="multi-select-dropdown"></div>
+                            <div id="selectedIndustrialsDisplay" class="selected-items"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="incidentDescription">Descripción:</label>
+                        <textarea id="incidentDescription" rows="4" required></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">📤 Reportar Incidencia</button>
+                </form>
+            </div>
+
+            <!-- Tab: Lista de Incidencias -->
+            <div id="incidentList" class="tab-content">
+                <h2>📋 Lista de Incidencias</h2>
+                <div id="incidentListContainer" class="list-container">
+                    <div class="loading">Cargando incidencias...</div>
+                </div>
+            </div>
+
+            <!-- Tab: Programar Visitas -->
+            <div id="visitSchedule" class="tab-content">
+                <h2>📅 Visitas Programadas</h2>
+                <div id="visitListContainer" class="list-container">
+                    <div class="loading">Cargando visitas...</div>
+                </div>
+            </div>
+
+            <!-- Tab: Comunidades -->
+            <div id="communities" class="tab-content">
+                <h2>🏢 Gestión de Comunidades</h2>
+                
+                <div class="form-section">
+                    <h3>➕ Agregar Nueva Comunidad</h3>
+                    <form id="communityForm" class="form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="communityName">Nombre de la Comunidad:</label>
+                                <input type="text" id="communityName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="communityAddress">Dirección:</label>
+                                <input type="text" id="communityAddress" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="presidentName">Nombre del Presidente:</label>
+                                <input type="text" id="presidentName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="presidentPhone">Teléfono del Presidente:</label>
+                                <input type="tel" id="presidentPhone" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">➕ Agregar Comunidad</button>
+                    </form>
+                </div>
+
+                <div class="list-section">
+                    <h3>📋 Lista de Comunidades</h3>
+                    <div id="communitiesListContainer" class="list-container">
+                        <div class="loading">Cargando comunidades...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Industriales -->
+            <div id="industrials" class="tab-content">
+                <h2>👷 Gestión de Industriales</h2>
+                
+                <div class="form-section">
+                    <h3>➕ Registrar Nuevo Industrial</h3>
+                    <form id="industrialForm" class="form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="industrialName">Nombre del Industrial:</label>
+                                <input type="text" id="industrialName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="industrialPhone">Teléfono:</label>
+                                <input type="tel" id="industrialPhone" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Especialidades:</label>
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" name="specialties" value="Fontanería"> Fontanería</label>
+                                <label><input type="checkbox" name="specialties" value="Electricidad"> Electricidad</label>
+                                <label><input type="checkbox" name="specialties" value="Climatización"> Climatización</label>
+                                <label><input type="checkbox" name="specialties" value="Mantenimiento"> Mantenimiento</label>
+                                <label><input type="checkbox" name="specialties" value="Piscinas"> Piscinas</label>
+                                <label><input type="checkbox" name="specialties" value="Jardinería"> Jardinería</label>
+                                <label><input type="checkbox" name="specialties" value="Cerrajería"> Cerrajería</label>
+                                <label><input type="checkbox" name="specialties" value="Pintura"> Pintura</label>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">➕ Registrar Industrial</button>
+                    </form>
+                </div>
+
+                <div class="list-section">
+                    <h3>📋 Lista de Industriales</h3>
+                    <div id="industrialsListContainer" class="list-container">
+                        <div class="loading">Cargando industriales...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para programar visita -->
+    <div id="scheduleModal" class="modal">
+        <div class="modal-content">
+            <h3>📅 Programar Visita</h3>
+            <form id="scheduleForm" class="form">
+                <input type="hidden" id="scheduleIncidentId">
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="visitDate">Fecha de la Visita:</label>
+                        <input type="date" id="visitDate" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="visitStartTime">Hora de Inicio:</label>
+                        <input type="time" id="visitStartTime" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="visitEndTime">Hora de Fin:</label>
+                        <input type="time" id="visitEndTime" required>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="visitNotes">Notas Adicionales:</label>
+                    <textarea id="visitNotes" rows="3"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="sendReminder">
+                        Enviar recordatorio al presidente de la comunidad
+                    </label>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" onclick="closeModal()" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">📅 Programar Visita</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para actualizar estado de visita -->
+    <div id="updateVisitModal" class="modal">
+        <div class="modal-content">
+            <h3>✏️ Actualizar Estado de Visita</h3>
+            
+            <div id="visitDetailsContainer"></div>
+            
+            <form id="updateVisitForm" class="form">
+                <input type="hidden" id="updateVisitId">
+                
+                <div class="form-group">
+                    <label for="newVisitStatus">Nuevo Estado:</label>
+                    <select id="newVisitStatus" required>
+                        <option value="scheduled">Programada</option>
+                        <option value="in_progress">En Progreso</option>
+                        <option value="completed">Completada</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="visitResponse">Detalles del Trabajo Realizado:</label>
+                    <textarea id="visitResponse" rows="4" placeholder="Describe el trabajo realizado, materiales utilizados, etc."></textarea>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" onclick="closeUpdateModal()" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">💾 Actualizar Estado</button>
+                </div>
+            </form>
+            
+            <!-- Sección para WhatsApp al propietario -->
+            <div id="whatsappSection" style="display: none;" class="whatsapp-section">
+                <hr>
+                <h4>📱 Notificar al Propietario</h4>
+                <div id="ownerInfoContainer"></div>
+                <button onclick="sendWhatsAppNotification()" class="btn btn-whatsapp">
+                    📱 Enviar WhatsApp al Propietario
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript modules in correct loading order -->
+    <!-- Core utilities and storage first -->
+    <script src="utils.js"></script>
+    <script src="storage.js"></script>
+    
+    <!-- Authentication -->
+    <script src="auth.js"></script>
+    
+    <!-- Data management modules -->
+    <script src="communities.js"></script>
+    <script src="industrials.js"></script>
+    <script src="incidents.js"></script>
+    <script src="visits.js"></script>
+    
+    <!-- External integrations -->
+    <script src="whatsapp.js"></script>
+    <script src="forms.js"></script>
+    
+    <!-- Main application - must be last -->
+    <script src="main.js"></script>
+</body>
+</html>
